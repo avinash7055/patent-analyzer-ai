@@ -1,0 +1,33 @@
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+python-multipart>=0.0.9
+python-dotenv>=1.0.1
+
+# LLM & Agents
+langchain-groq>=0.2.0
+langchain-core>=0.3.0
+langchain-community>=0.3.0
+langgraph>=0.2.0
+
+# Embeddings & Vector Store
+sentence-transformers>=3.0.0
+chromadb>=0.5.0
+langchain-chroma>=0.1.4
+langchain-huggingface>=0.1.0
+
+# Document Processing
+python-docx>=1.1.2
+lxml>=5.3.2
+
+# PDF Report
+fpdf2>=2.8.1
+
+# Data
+pandas>=2.2.0
+openpyxl>=3.1.2
+
+# Image Processing
+Pillow>=10.4.0
+
+# CORS
+pydantic>=2.9.0
