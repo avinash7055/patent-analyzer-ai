@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef } from "react";
 import {
-  Cpu, ShieldCheck, Grid3X3, FileText, MessageSquare,
+  Cpu, ShieldCheck, Grid3X3, FileText,
   UploadCloud, Layers, Sparkles, FileCheck2, X, Check,
   Zap, ChevronRight, Loader2, AlertCircle,
 } from "lucide-react";
@@ -8,7 +8,7 @@ import FeaturesTab from "./components/FeaturesTab";
 import ValidationTab from "./components/ValidationTab";
 import MatrixTab from "./components/MatrixTab";
 import ReportTab from "./components/ReportTab";
-import ChatTab from "./components/ChatTab";
+// import ChatTab from "./components/ChatTab"; // temporarily disabled
 import { uploadDocuments, runAnalysis } from "./api";
 import "./App.css";
 
@@ -109,7 +109,7 @@ function App() {
     { id: "validation", label: "PR Validation", icon: ShieldCheck },
     { id: "matrix", label: "Prior Art Matrix", icon: Grid3X3 },
     { id: "report", label: "PDF Report", icon: FileText },
-    { id: "chat", label: "AI Chat", icon: MessageSquare },
+    // { id: "chat", label: "AI Chat", icon: MessageSquare }, // temporarily disabled
   ];
 
   const bothReady = idfFile && prFile;
@@ -240,7 +240,7 @@ function App() {
                 <div className="empty-chip"><Layers size={13} /><span>Feature Extraction</span></div>
                 <div className="empty-chip"><ShieldCheck size={13} /><span>PR Validation</span></div>
                 <div className="empty-chip"><Grid3X3 size={13} /><span>Prior Art Mapping</span></div>
-                <div className="empty-chip"><Sparkles size={13} /><span>AI Chat</span></div>
+                <div className="empty-chip"><Sparkles size={13} /><span>AI Chat (Coming Soon)</span></div>
               </div>
             </div>
           )}
@@ -268,7 +268,8 @@ function App() {
             />
           )}
           {analysisData && activeTab === "report" && <ReportTab />}
-          {activeTab === "chat" && <ChatTab hasAnalysis={!!analysisData} />}
+          {/* Chat tab temporarily disabled */}
+          {/* {activeTab === "chat" && <ChatTab hasAnalysis={!!analysisData} />} */}
         </div>
       </main>
     </div>
