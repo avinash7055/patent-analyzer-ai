@@ -1,5 +1,7 @@
 import logging
 import shutil
+import json
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, UploadFile, File, HTTPException
@@ -7,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
-from config import UPLOADS_DIR, EXTRACTED_DIR
+from config import UPLOADS_DIR, EXTRACTED_DIR, DATA_DIR
 from src.doc_processor import (
     DocumentProcessor,
     extract_prior_art_sections,
@@ -18,19 +20,10 @@ from src.agents import run_analysis
 from src.report_generator import ReportGenerator
 from src.vector_store import VectorStore
 from src.chat_engine import ChatEngine
+from src.model_loader import get_embedding_model
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-app = FastAPI(title="Patent Analysis API", version="1.0.0")
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
 doc_processor = DocumentProcessor()
 image_extractor = ImageExtractor()
@@ -41,6 +34,49 @@ chat_engine: ChatEngine | None = None
 analysis_result: dict = {}
 uploaded_files: dict = {}
 
+# Disk-based cache to survive server restarts
+CACHE_PATH = DATA_DIR / "analysis_cache.json"
+_cache = {"idf_hash": None, "pr_hash": None}
+
+def _load_disk_cache():
+    global analysis_result, chat_engine, _cache
+    if CACHE_PATH.exists():
+        try:
+            with open(CACHE_PATH, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            _cache["idf_hash"] = data.get("idf_hash")
+            _cache["pr_hash"] = data.get("pr_hash")
+            analysis_result = data.get("analysis_result", {})
+            if analysis_result and vector_store.collection:
+                chat_engine = ChatEngine(vector_store)
+                logger.info("Restored analysis result and chat engine from disk cache ✓")
+        except Exception as e:
+            logger.warning(f"Failed to load disk cache: {e}")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Pre-load the embedding model at startup so it's ready for first request."""
+    logger.info("=" * 60)
+    logger.info("Patent Analyzer AI — Starting up")
+    logger.info("Loading embedding model (first run downloads & caches locally)...")
+    get_embedding_model()   # ← triggers download+save on first run, disk load after
+    _load_disk_cache()      # ← loads previous analysis state from disk
+    logger.info("Embedding model ready ✓")
+    logger.info("=" * 60)
+    yield
+    logger.info("Patent Analyzer AI — Shutting down")
+
+
+app = FastAPI(title="Patent Analysis API", version="1.0.0", lifespan=lifespan)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 
 class ChatRequest(BaseModel):
     message: str
@@ -50,6 +86,24 @@ class AnalyzeRequest(BaseModel):
     pass
 
 
+import hashlib
+
+def _file_hash(path: str) -> str:
+    """Compute SHA-256 hash of a file on disk."""
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(8192), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+def _bytes_hash(data: bytes) -> str:
+    """Compute SHA-256 hash of in-memory bytes."""
+    return hashlib.sha256(data).hexdigest()
+
+# Mutable cache dict — avoids Python `global` reassignment issues
+_cache = {"idf_hash": None, "pr_hash": None}
+
+
 @app.post("/api/upload")
 async def upload_documents(
     idf_file: UploadFile = File(...),
@@ -57,18 +111,55 @@ async def upload_documents(
 ):
     global uploaded_files
 
+    # 1. Read file bytes into memory (no disk write yet)
+    idf_bytes = await idf_file.read()
+    pr_bytes = await pr_file.read()
+
+    # 2. Compute hashes from in-memory bytes
+    new_idf_hash = _bytes_hash(idf_bytes)
+    new_pr_hash = _bytes_hash(pr_bytes)
+
+    # 3. Check cache BEFORE writing to disk
+    cache_hit = (
+        analysis_result
+        and chat_engine is not None
+        and _cache["idf_hash"] is not None
+        and new_idf_hash == _cache["idf_hash"]
+        and new_pr_hash == _cache["pr_hash"]
+    )
+
     idf_path = UPLOADS_DIR / idf_file.filename
     pr_path = UPLOADS_DIR / pr_file.filename
+    uploaded_files = {"idf": str(idf_path), "pr": str(pr_path)}
+
+    if cache_hit:
+        # Same files — skip disk write entirely
+        logger.info("Same files detected — skipping disk write, cached results available ✓")
+        return {
+            "status": "uploaded",
+            "cached": True,
+            "idf_filename": idf_file.filename,
+            "pr_filename": pr_file.filename,
+        }
+
+    # 4. New files — write to disk
+    UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
 
     with open(idf_path, "wb") as f:
-        shutil.copyfileobj(idf_file.file, f)
+        f.write(idf_bytes)
     with open(pr_path, "wb") as f:
-        shutil.copyfileobj(pr_file.file, f)
+        f.write(pr_bytes)
 
-    uploaded_files = {"idf": str(idf_path), "pr": str(pr_path)}
+    # 5. Clean previously extracted data for fresh analysis
+    if EXTRACTED_DIR.exists():
+        shutil.rmtree(EXTRACTED_DIR)
+    EXTRACTED_DIR.mkdir(parents=True, exist_ok=True)
+
+    logger.info(f"New documents uploaded: IDF={idf_file.filename}, PR={pr_file.filename}")
 
     return {
         "status": "uploaded",
+        "cached": False,
         "idf_filename": idf_file.filename,
         "pr_filename": pr_file.filename,
     }
@@ -80,6 +171,20 @@ async def analyze_documents():
 
     if not uploaded_files:
         raise HTTPException(status_code=400, detail="No documents uploaded. Please upload IDF and PR first.")
+
+    # Quick cache check — if same file hashes, return instantly
+    current_idf_hash = _file_hash(uploaded_files["idf"])
+    current_pr_hash = _file_hash(uploaded_files["pr"])
+
+    if (
+        analysis_result
+        and chat_engine is not None
+        and _cache["idf_hash"] is not None
+        and current_idf_hash == _cache["idf_hash"]
+        and current_pr_hash == _cache["pr_hash"]
+    ):
+        logger.info(" Same files — returning cached analysis instantly!")
+        return analysis_result
 
     try:
         logger.info("Processing IDF document...")
@@ -144,7 +249,22 @@ async def analyze_documents():
             "status": result.get("status", "complete"),
         }
 
-        logger.info("Analysis complete!")
+        # ★ Save hashes into the mutable cache dict
+        _cache["idf_hash"] = current_idf_hash
+        _cache["pr_hash"] = current_pr_hash
+        
+        # Save cache to disk for persistence across server restarts
+        try:
+            with open(CACHE_PATH, "w", encoding="utf-8") as f:
+                json.dump({
+                    "idf_hash": current_idf_hash,
+                    "pr_hash": current_pr_hash,
+                    "analysis_result": analysis_result
+                }, f)
+        except Exception as e:
+            logger.warning(f"Failed to write disk cache: {e}")
+
+        logger.info(f"Analysis complete! Hashes cached: IDF={str(current_idf_hash)[:12]}... PR={str(current_pr_hash)[:12]}...")
         return analysis_result
 
     except Exception as e:

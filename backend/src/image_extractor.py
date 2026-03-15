@@ -55,6 +55,8 @@ class ImageExtractor:
         paragraph_texts = self._get_paragraph_texts(zf)
 
         extracted = []
+        vision_tasks = []
+
         for media_path in media_files:
             fname = os.path.basename(media_path)
             ext = os.path.splitext(fname)[1].lower()
@@ -80,30 +82,61 @@ class ImageExtractor:
                 surrounding = paragraph_texts.get(image_key, "")
 
             section = self._guess_section(surrounding)
-
-            # --- Vision LLM enrichment ---
-            vision_desc = ""
             final_path = str(png_path if png_path.exists() else saved_path)
-            if self.use_vision and ext in [".png", ".jpg", ".jpeg", ".gif", ".webp"]:
-                vision_desc = self._describe_with_vision(final_path, surrounding)
 
-            # Combine surrounding text + vision description for richer context
+            extracted.append({
+                "image_id": f"{doc_label}_{image_key}",
+                "filename": fname,
+                "filepath": final_path,
+                "original_format": ext,
+                "section": section,
+                "surrounding": surrounding,
+            })
+
+            if self.use_vision and ext in [".png", ".jpg", ".jpeg", ".gif", ".webp"]:
+                vision_tasks.append({
+                    "index": len(extracted) - 1,
+                    "filepath": final_path,
+                    "surrounding": surrounding
+                })
+
+        zf.close()
+
+        # Run vision LLM calls in parallel
+        if vision_tasks:
+            logger.info(f"Running {len(vision_tasks)} Vision LLM calls in parallel...")
+            import concurrent.futures
+            
+            def get_vision_desc(task):
+                return task["index"], self._describe_with_vision(task["filepath"], task["surrounding"])
+            
+            with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+                results = executor.map(get_vision_desc, vision_tasks)
+                
+                for idx, desc in results:
+                    extracted[idx]["vision_desc"] = desc
+
+        # Build final ExtractedImage objects
+        final_extracted = []
+        for item in extracted:
+            vision_desc = item.get("vision_desc", "")
+            surrounding = item["surrounding"]
+            
             combined_text = surrounding
             if vision_desc:
                 combined_text = f"{surrounding}\n[Vision Description]: {vision_desc}" if surrounding else vision_desc
 
-            extracted.append(ExtractedImage(
-                image_id=f"{doc_label}_{image_key}",
-                filename=fname,
-                filepath=final_path,
-                original_format=ext,
-                section=section,
+            final_extracted.append(ExtractedImage(
+                image_id=item["image_id"],
+                filename=item["filename"],
+                filepath=item["filepath"],
+                original_format=item["original_format"],
+                section=item["section"],
                 surrounding_text=combined_text[:800],
                 vision_description=vision_desc,
             ))
 
-        zf.close()
-        return extracted
+        return final_extracted
 
     def _build_image_paragraph_map(self, zf: zipfile.ZipFile) -> dict[str, str]:
         """Extract surrounding text for each image by parsing document XML.

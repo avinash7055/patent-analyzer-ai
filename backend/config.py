@@ -9,8 +9,9 @@ UPLOADS_DIR = BASE_DIR / "uploads"
 EXTRACTED_DIR = BASE_DIR / "extracted"
 DATA_DIR = BASE_DIR / "data"
 CHROMA_DIR = DATA_DIR / "chromadb"
+MODEL_CACHE_DIR = DATA_DIR / "models"
 
-for d in [UPLOADS_DIR, EXTRACTED_DIR, DATA_DIR, CHROMA_DIR]:
+for d in [UPLOADS_DIR, EXTRACTED_DIR, DATA_DIR, CHROMA_DIR, MODEL_CACHE_DIR]:
     d.mkdir(parents=True, exist_ok=True)
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
@@ -19,6 +20,7 @@ ANALYSIS_MODEL = "llama-3.3-70b-versatile"
 ROUTER_MODEL = "llama-3.1-8b-instant"
 VISION_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"
 EMBEDDING_MODEL = "BAAI/bge-small-en-v1.5"
+EMBEDDING_MODEL_LOCAL_NAME = "bge-small-en-v1.5"  # folder name inside MODEL_CACHE_DIR
 
 TEMPERATURE = 0.1
 MAX_TOKENS = 8192

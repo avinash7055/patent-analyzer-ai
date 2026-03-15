@@ -2,13 +2,13 @@ import logging
 from pathlib import Path
 
 import chromadb
-from chromadb.config import Settings
 from sentence_transformers import SentenceTransformer
 
 import sys
 sys.path.insert(0, str(__import__("pathlib").Path(__file__).parent.parent))
-from config import CHROMA_DIR, EMBEDDING_MODEL, TOP_K_RETRIEVAL
+from config import CHROMA_DIR, TOP_K_RETRIEVAL
 from src.doc_processor import ProcessedDocument
+from src.model_loader import get_embedding_model
 
 logger = logging.getLogger(__name__)
 
@@ -17,9 +17,15 @@ class VectorStore:
 
     def __init__(self, persist_dir: Path = None):
         self.persist_dir = persist_dir or CHROMA_DIR
-        self.embedding_model = SentenceTransformer(EMBEDDING_MODEL)
+        self.embedding_model = get_embedding_model()   # ← singleton, loads once
         self.client = chromadb.PersistentClient(path=str(self.persist_dir))
-        self.collection = None
+        
+        # Try to load existing collection so it works after restarts
+        try:
+            self.collection = self.client.get_collection("patent_analysis")
+            logger.info("Successfully reconnected to existing 'patent_analysis' vector collection.")
+        except Exception:
+            self.collection = None
 
     def build_index(
         self,
