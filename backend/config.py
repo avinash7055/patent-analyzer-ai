@@ -145,11 +145,12 @@ CONVERSATION HISTORY:
 USER QUESTION: {question}
 
 Rules:
-1. Answer based on the provided context only
-2. If the context contains relevant image references, mention them
-3. Cite specific sections, features (KF1, KF2...), or prior art references (D1, D2...)
-4. If you are unsure, say so
-5. Be concise but thorough
+1. Answer ONLY what the user asked — be concise and to the point
+2. Do NOT dump all the context. Extract only the relevant information for the question
+3. Cite specific features (KF1, KF2...) or prior art references (D1, D2...) when relevant
+4. If the answer is simple, keep it short (2-3 sentences). Only elaborate if the question demands it
+5. If you are unsure or the context doesn't contain the answer, say so briefly
+6. Do NOT mention images or figures unless the user specifically asks about them
 
 Answer:"""
 

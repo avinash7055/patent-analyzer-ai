@@ -210,17 +210,18 @@ async def analyze_documents():
             prior_art_sections=prior_art_sections,
         )
 
-        logger.info("Generating PDF report...")
-        report_path = EXTRACTED_DIR / "patent_analysis_report.pdf"
-        report_generator.generate(
-            features=result.get("features", []),
-            validation=result.get("validation", []),
-            mapping=result.get("mapping", {}),
-            prior_art_labels=result.get("prior_art_labels", {}),
-            output_path=report_path,
-            title=idf_doc.sections.get("1.3\tDisclosure Title", "Patent Analysis"),
-            inventors="",
-        )
+        # PDF report generation temporarily disabled
+        # logger.info("Generating PDF report...")
+        # report_path = EXTRACTED_DIR / "patent_analysis_report.pdf"
+        # report_generator.generate(
+        #     features=result.get("features", []),
+        #     validation=result.get("validation", []),
+        #     mapping=result.get("mapping", {}),
+        #     prior_art_labels=result.get("prior_art_labels", {}),
+        #     output_path=report_path,
+        #     title=idf_doc.sections.get("1.3\tDisclosure Title", "Patent Analysis"),
+        #     inventors="",
+        # )
 
         logger.info("Building vector store...")
         all_images = [
@@ -239,7 +240,7 @@ async def analyze_documents():
             "validation": result.get("validation", []),
             "mapping": result.get("mapping", {}),
             "prior_art_labels": result.get("prior_art_labels", {}),
-            "report_path": str(report_path),
+            # "report_path": str(report_path),  # PDF report disabled
             "idf_images": [{"id": img.image_id, "filename": img.filename,
                            "path": img.filepath, "section": img.section}
                           for img in idf_images],

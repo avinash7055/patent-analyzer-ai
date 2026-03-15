@@ -23,21 +23,26 @@
 }
 
 .legend-dot.novel {
-  background: var(--success);
-  box-shadow: 0 0 6px var(--success-border);
+  background: #2d8a54;
+  box-shadow: 0 0 6px rgba(45, 157, 94, 0.25);
 }
 
 .legend-dot.partial {
-  background: var(--warning);
-  box-shadow: 0 0 6px var(--warning-border);
+  background: #b5891a;
+  box-shadow: 0 0 6px rgba(201, 142, 26, 0.25);
 }
 
 .legend-dot.match {
   background: var(--bg-elevated);
-  border: 1px solid var(--border-strong);
+  border: 1.5px solid var(--border-strong);
 }
 
 /* ===== MATRIX TABLE ===== */
+.matrix-table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
 .matrix-table .sticky-col {
   position: sticky;
   left: 0;
@@ -46,9 +51,32 @@
   min-width: 200px;
 }
 
+.matrix-table thead th {
+  background: #f5f0e8;
+  color: #7a6840;
+  border-bottom: 2px solid rgba(192, 138, 48, 0.18);
+}
+
 .matrix-table thead .sticky-col {
   z-index: 15;
-  background: var(--accent-subtle);
+  background: #f5f0e8;
+}
+
+/* Subtle alternating rows for readability */
+.matrix-table tbody tr:nth-child(even) td {
+  background-color: rgba(0, 0, 0, 0.018);
+}
+
+.matrix-table tbody tr:nth-child(even) .sticky-col {
+  background-color: #f9f8f5;
+}
+
+.matrix-table tbody tr:hover td {
+  background-color: rgba(192, 138, 48, 0.04) !important;
+}
+
+.matrix-table tbody tr:hover .sticky-col {
+  background-color: #f6f2eb !important;
 }
 
 .feature-cell {
@@ -88,25 +116,33 @@
   border-left: 1px solid var(--border-subtle);
 }
 
+/* ── Cell States: colored backgrounds matching legend ── */
+
+/* NO → green fill (matches green legend dot) */
 .cell-novel {
-  background: var(--success-subtle);
-  color: var(--success);
-  font-weight: 600;
+  background: rgba(45, 157, 94, 0.18) !important;
+  color: #1a6e3c;
+  font-weight: 700;
 }
 
+/* Yes, Partially → amber/orange fill (matches amber legend dot) */
 .cell-partial {
-  background: var(--warning-subtle);
-  color: var(--warning);
+  background: rgba(201, 142, 26, 0.18) !important;
+  color: #6b4e0a;
+  font-weight: 500;
 }
 
+/* Exact match → light neutral fill */
 .cell-match {
+  background: rgba(0, 0, 0, 0.03) !important;
   color: var(--text-primary);
 }
 
+/* N/A → subtle gray fill */
 .cell-na {
+  background: rgba(0, 0, 0, 0.03) !important;
   color: var(--text-muted);
   font-style: italic;
-  opacity: 0.7;
 }
 
 .pa-label {

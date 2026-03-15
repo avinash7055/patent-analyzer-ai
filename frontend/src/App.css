@@ -661,11 +661,11 @@
 }
 
 .data-table tr:nth-child(even) td {
-  background: rgba(255, 255, 255, 0.015);
+  background: rgba(0, 0, 0, 0.018);
 }
 
 .data-table tr:hover td {
-  background: var(--glass-bg-hover);
+  background: rgba(192, 138, 48, 0.04);
 }
 
 .data-table tr {

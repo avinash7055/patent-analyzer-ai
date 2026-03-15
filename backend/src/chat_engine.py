@@ -65,6 +65,17 @@ class ChatEngine:
 
         return self._rag_answer(message)
 
+    # Keywords that indicate the user wants to see images/figures
+    _IMAGE_KEYWORDS = {
+        "image", "images", "figure", "figures", "diagram", "diagrams",
+        "picture", "pictures", "photo", "drawing", "drawings",
+        "illustration", "chart", "graph", "show me", "visual",
+    }
+
+    def _wants_images(self, question: str) -> bool:
+        q_lower = question.lower()
+        return any(kw in q_lower for kw in self._IMAGE_KEYWORDS)
+
     def _rag_answer(self, question: str) -> dict:
         try:
             retrieved = self.vector_store.query(question)
@@ -72,16 +83,29 @@ class ChatEngine:
             context_parts = []
             sources = []
             images = []
+            seen_sources = set()
+
+            wants_images = self._wants_images(question)
 
             for chunk in retrieved:
                 context_parts.append(chunk["text"])
-                sources.append({
-                    "section": chunk["metadata"].get("section", ""),
-                    "doc_type": chunk["metadata"].get("doc_type", ""),
-                })
-                if chunk["metadata"].get("has_image") == "true":
+
+                # Deduplicate sources
+                src_key = (
+                    chunk["metadata"].get("doc_type", ""),
+                    chunk["metadata"].get("section", ""),
+                )
+                if src_key not in seen_sources:
+                    seen_sources.add(src_key)
+                    sources.append({
+                        "section": src_key[1],
+                        "doc_type": src_key[0],
+                    })
+
+                # Only include images if the user specifically asks
+                if wants_images and chunk["metadata"].get("has_image") == "true":
                     img_path = chunk["metadata"].get("image_path", "")
-                    if img_path:
+                    if img_path and img_path not in images:
                         images.append(img_path)
 
             context = "\n\n---\n\n".join(context_parts)
