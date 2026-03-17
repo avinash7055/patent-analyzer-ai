@@ -49,7 +49,7 @@ function FeaturesTab({ features }) {
                 <td className="feature-cell-name">{f.name}</td>
                 <td>{f.description}</td>
                 <td>
-                  <span className="badge badge-accent">{f.idf_section}</span>
+                  <span className="badge badge-accent">{f.idf_section || f.source_section || "—"}</span>
                 </td>
               </tr>
             ))}

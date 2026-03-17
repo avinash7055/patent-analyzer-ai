@@ -16,6 +16,8 @@ from config import (
     TEMPERATURE,
     MAX_TOKENS,
     FEATURE_EXTRACTOR_PROMPT,
+    PR_ELEMENTS_EXTRACTOR_PROMPT,
+    PRIOR_ART_EXTRACTOR_PROMPT,
     PR_VALIDATOR_PROMPT,
     PRIOR_ART_MAPPER_PROMPT,
     ROUTER_PROMPT,
@@ -28,6 +30,7 @@ class AnalysisState(TypedDict, total=False):
     idf_text: str
     pr_text: str
     pr_elements_text: str
+    prior_art_text: str
     prior_art_sections: dict[str, str]
     features: list[dict]
     validation: list[dict]
@@ -68,10 +71,71 @@ def _parse_json_response(content: str) -> dict:
         raise
 
 
+def extract_pr_elements_llm(pr_text: str) -> str:
+    try:
+        llm = _get_analysis_llm()
+        prompt = PR_ELEMENTS_EXTRACTOR_PROMPT.format(pr_text=pr_text[:40000])
+        response = llm.invoke([HumanMessage(content=prompt)])
+        result = _parse_json_response(response.content)
+
+        elements = result.get("elements", [])
+        if not elements:
+            logger.warning("LLM found no PR elements — falling back to raw PR text")
+            return pr_text[:8000]
+
+        lines = []
+        for el in elements:
+            el_id = el.get("id", "?")
+            desc = el.get("description", "")
+            text = el.get("text", "")
+            lines.append(f"[{el_id}] {desc}: {text}")
+
+        formatted = "\n\n".join(lines)
+        logger.info(f"LLM extracted {len(elements)} PR elements")
+        return formatted
+
+    except Exception as e:
+        logger.error(f"LLM-based PR element extraction failed: {e}")
+        return pr_text[:8000]
+
+
+def extract_prior_art_llm(pr_text: str) -> tuple[dict[str, str], str]:
+    try:
+        llm = _get_analysis_llm()
+        prompt = PRIOR_ART_EXTRACTOR_PROMPT.format(pr_text=pr_text[:40000])
+        response = llm.invoke([HumanMessage(content=prompt)])
+        result = _parse_json_response(response.content)
+
+        refs = result.get("prior_art_references", [])
+        if not refs:
+            logger.info("LLM found no prior art references in PR.")
+            return {}, ""
+
+        sections = {}
+        text_parts = []
+
+        for ref in refs:
+            ref_id = ref.get("id", f"D{len(sections)+1}")
+            patent_num = ref.get("patent_number", "N/A")
+            title = ref.get("title", "")
+            text = ref.get("text", "")
+
+            sections[ref_id] = text
+            label = f"{patent_num} - {title}" if patent_num != "N/A" else title
+            text_parts.append(f"\n--- {ref_id}: {label} ---\n{text}")
+
+        logger.info(f"LLM extracted {len(refs)} prior art references")
+        return sections, "\n".join(text_parts)
+
+    except Exception as e:
+        logger.error(f"LLM-based prior art extraction failed: {e}")
+        return {}, ""
+
+
 def extract_features_node(state: AnalysisState) -> dict:
     try:
         llm = _get_analysis_llm()
-        prompt = FEATURE_EXTRACTOR_PROMPT.format(idf_text=state["idf_text"][:12000])
+        prompt = FEATURE_EXTRACTOR_PROMPT.format(idf_text=state["idf_text"][:40000])
         response = llm.invoke([HumanMessage(content=prompt)])
         result = _parse_json_response(response.content)
         return {
@@ -89,7 +153,7 @@ def validate_pr_node(state: AnalysisState) -> dict:
         features_json = json.dumps(state["features"], indent=2)
         prompt = PR_VALIDATOR_PROMPT.format(
             features_json=features_json,
-            pr_elements_text=state["pr_elements_text"][:8000]
+            pr_elements_text=state["pr_elements_text"][:40000]
         )
         response = llm.invoke([HumanMessage(content=prompt)])
         result = _parse_json_response(response.content)
@@ -104,15 +168,17 @@ def validate_pr_node(state: AnalysisState) -> dict:
 
 def map_prior_art_node(state: AnalysisState) -> dict:
     try:
+        prior_art_text = state.get("prior_art_text", "")
+        if not prior_art_text:
+            logger.info("No prior art references found — skipping mapping.")
+            return {"mapping": {}, "prior_art_labels": {}, "status": "mapping_skipped"}
+
         llm = _get_analysis_llm()
         features_json = json.dumps(state["features"], indent=2)
-        prior_art_text = ""
-        for ref_id, ref_text in state.get("prior_art_sections", {}).items():
-            prior_art_text += f"\n--- {ref_id} ---\n{ref_text[:3000]}\n"
 
         prompt = PRIOR_ART_MAPPER_PROMPT.format(
             features_json=features_json,
-            prior_art_text=prior_art_text[:12000]
+            prior_art_text=prior_art_text[:40000]
         )
         response = llm.invoke([HumanMessage(content=prompt)])
         result = _parse_json_response(response.content)
@@ -141,17 +207,19 @@ def build_analysis_graph() -> StateGraph:
     return graph.compile()
 
 
-def run_analysis(
-    idf_text: str,
-    pr_text: str,
-    pr_elements_text: str,
-    prior_art_sections: dict[str, str]
-) -> AnalysisState:
+def run_analysis(idf_text: str, pr_text: str) -> AnalysisState:
+    logger.info("Extracting PR elements via LLM...")
+    pr_elements_text = extract_pr_elements_llm(pr_text)
+
+    logger.info("Extracting prior art references via LLM...")
+    prior_art_sections, prior_art_text = extract_prior_art_llm(pr_text)
+
     graph = build_analysis_graph()
     initial_state: AnalysisState = {
         "idf_text": idf_text,
         "pr_text": pr_text,
         "pr_elements_text": pr_elements_text,
+        "prior_art_text": prior_art_text,
         "prior_art_sections": prior_art_sections,
         "features": [],
         "validation": [],

@@ -19,31 +19,32 @@ GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 ANALYSIS_MODEL = "llama-3.3-70b-versatile"
 ROUTER_MODEL = "llama-3.1-8b-instant"
 VISION_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"
-EMBEDDING_MODEL = "BAAI/bge-small-en-v1.5"
-EMBEDDING_MODEL_LOCAL_NAME = "bge-small-en-v1.5"  # folder name inside MODEL_CACHE_DIR
 
 TEMPERATURE = 0.1
 MAX_TOKENS = 8192
-TOP_K_RETRIEVAL = 5
 
-FEATURE_EXTRACTOR_PROMPT = """You are a patent analysis expert. Analyze the following Invention Disclosure Form (IDF) and extract ALL key technical features of the invention.
+
+FEATURE_EXTRACTOR_PROMPT = """You are a patent analysis expert. Analyze the following Invention Disclosure Form (IDF) document and extract ALL key technical features of the invention.
+
+The IDF may be in any format or template. Read it carefully and identify every important technical aspect.
 
 For each feature, provide:
 - A short feature ID (KF1, KF2, etc.)
 - A concise feature name
 - A detailed description
-- The IDF section where it appears
+- The section or part of the document where it appears
 
-Be thorough. Include features related to:
-- Materials and compositions (resins, fillers, fibers)
-- Layer structure and construction
-- Specific property values (Dk, Df, thickness, ratios)
-- Performance metrics (reflectivity, transmission)
-- Manufacturing processes
-- Intended applications/uses
-- Orientation/arrangement requirements
+Be thorough. Extract features related to:
+- Core technical innovations and novel aspects
+- Materials and compositions
+- Layer structures, constructions, configurations
+- Specific property values, measurements, dimensions, ratios
+- Performance metrics and characteristics
+- Manufacturing processes and methods
+- Intended applications and uses
+- Any unique arrangements or orientations
 
-IDF TEXT:
+IDF DOCUMENT TEXT:
 {idf_text}
 
 Respond in JSON format:
@@ -53,7 +54,55 @@ Respond in JSON format:
       "id": "KF1",
       "name": "Short feature name",
       "description": "Detailed description of the feature",
-      "idf_section": "Section reference"
+      "idf_section": "Section reference or description of where it appears"
+    }}
+  ]
+}}"""
+
+PR_ELEMENTS_EXTRACTOR_PROMPT = """You are a patent analysis expert. Analyze the following Patentability Report (PR) document and extract ALL technical elements that the PR has identified and captured.
+
+The PR may be in any format or template. Read it carefully and identify every technical element, claim element, or feature description that the PR discusses.
+
+PR DOCUMENT TEXT:
+{pr_text}
+
+Extract each element with:
+- Element ID (as labeled in the document, e.g., A1, A1a, B1, etc. — or assign E1, E2, E3 if no IDs are present)
+- Description of what the element covers
+- The relevant text/excerpt from the PR
+
+Respond in JSON format:
+{{
+  "elements": [
+    {{
+      "id": "A1a",
+      "description": "Brief description of what this element covers",
+      "text": "The relevant text from the PR document"
+    }}
+  ]
+}}"""
+
+PRIOR_ART_EXTRACTOR_PROMPT = """You are a patent analysis expert. Analyze the following Patentability Report (PR) document and extract ALL prior art references mentioned in it.
+
+The PR may be in any format or template. Look for any referenced patents, publications, or prior art documents.
+
+PR DOCUMENT TEXT:
+{pr_text}
+
+For each prior art reference, extract:
+- A short reference ID (D1, D2, D3, etc.)
+- The patent/publication number (if available)
+- A short title or description
+- ALL relevant text about this prior art, including what it discloses and how it relates to the invention
+
+Respond in JSON format:
+{{
+  "prior_art_references": [
+    {{
+      "id": "D1",
+      "patent_number": "US1234567 or N/A if not available",
+      "title": "Short descriptive title",
+      "text": "Complete summary and relevant details about this prior art reference"
     }}
   ]
 }}"""
@@ -65,7 +114,7 @@ For each IDF feature, check if it is correctly captured in the PR's technical el
 IDF KEY FEATURES:
 {features_json}
 
-PR TECHNICAL ELEMENTS TEXT:
+PR TECHNICAL ELEMENTS:
 {pr_elements_text}
 
 For each feature, determine:
@@ -79,14 +128,14 @@ Respond in JSON format:
     {{
       "feature_id": "KF1",
       "feature_name": "Feature name",
-      "pr_element": "A1a or N/A",
+      "pr_element": "Element ID or N/A",
       "captured": true,
       "details": "Brief explanation"
     }}
   ]
 }}"""
 
-PRIOR_ART_MAPPER_PROMPT = """You are a patent analysis expert. Map each key feature of an invention against each prior art reference found in a Patentability Report.
+PRIOR_ART_MAPPER_PROMPT = """You are a patent analysis expert. Map each key feature of an invention against each prior art reference found in the Patentability Report.
 
 KEY FEATURES:
 {features_json}
@@ -133,39 +182,6 @@ Respond in JSON format:
   "intent": "greeting|patent_question|export_request|irrelevant",
   "friendly_response": "A warm, helpful response appropriate for the intent"
 }}"""
-
-RAG_CHAT_PROMPT = """You are a patent analysis assistant. Answer the user's question based ONLY on the provided context from the IDF (Invention Disclosure Form) and PR (Patentability Report).
-
-CONTEXT FROM DOCUMENTS:
-{context}
-
-CONVERSATION HISTORY:
-{chat_history}
-
-USER QUESTION: {question}
-
-Rules:
-1. Answer ONLY what the user asked — be concise and to the point
-2. Do NOT dump all the context. Extract only the relevant information for the question
-3. Cite specific features (KF1, KF2...) or prior art references (D1, D2...) when relevant
-4. If the answer is simple, keep it short (2-3 sentences). Only elaborate if the question demands it
-5. If you are unsure or the context doesn't contain the answer, say so briefly
-6. Do NOT mention images or figures unless the user specifically asks about them
-
-Answer:"""
-
-IMAGE_DESCRIPTION_PROMPT = """Describe this image from a patent document in detail.
-Focus on:
-- Physical structure, layers, and geometry
-- Materials and compositions visible
-- Labels, numbered components, and annotations
-- Measurements, dimensions, or scale indicators
-- Charts/graphs: axes, data trends, and key values
-- Any text or captions visible in the image
-
-Surrounding document context: {surrounding_text}
-
-Provide a concise but thorough technical description (2-4 sentences)."""
 
 PDF_TITLE = "Patent Analysis Report"
 PDF_SUBTITLE = "IDF vs PR - Key Features Correlation Analysis"

@@ -7,7 +7,21 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 from dataclasses import dataclass, field
 
-from config import EXTRACTED_DIR, GROQ_API_KEY, VISION_MODEL, IMAGE_DESCRIPTION_PROMPT
+from config import EXTRACTED_DIR, GROQ_API_KEY, VISION_MODEL
+
+# Defined locally since the global config prompt was disabled
+IMAGE_DESCRIPTION_PROMPT = """Describe this image from a patent document in detail.
+Focus on:
+- Physical structure, layers, and geometry
+- Materials and compositions visible
+- Labels, numbered components, and annotations
+- Measurements, dimensions, or scale indicators
+- Charts/graphs: axes, data trends, and key values
+- Any text or captions visible in the image
+
+Surrounding document context: {surrounding_text}
+
+Provide a concise but thorough technical description (2-4 sentences)."""
 
 try:
     from PIL import Image

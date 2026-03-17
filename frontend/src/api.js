@@ -36,20 +36,6 @@ export async function getResults() {
     return response.json();
 }
 
-export async function sendChatMessage(message) {
-    const response = await fetch(`${API_BASE}/api/chat`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message }),
-    });
-
-    if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.detail || "Chat failed");
-    }
-    return response.json();
-}
-
 export function getReportUrl() {
     return `${API_BASE}/api/report/pdf`;
 }
